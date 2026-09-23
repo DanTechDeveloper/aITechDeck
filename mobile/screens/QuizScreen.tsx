@@ -51,7 +51,7 @@ export function QuizScreen({ navigation, route }: Props) {
   const start = async () => {
     if (!category || !difficulty) return;
     setLoading(true);
-    setLoadError(null);
+  setLoadError(null);
     try {
       setQuestions(await getQuiz(category, difficulty));
       setStage({ name: "question", index: 0 });
