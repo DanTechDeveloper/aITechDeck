@@ -8,9 +8,21 @@ export type Category = {
 };
 
 export type QuizQuestion = {
+  id: number;
   question: string;
   options: string[];
   answerIndex: number;
+};
+
+export type Struggle = {
+  question_id: number;
+  category: string;
+  difficulty: string;
+  question: string;
+  options: string[];
+  answerIndex: number;
+  selectedIndex: number;
+  updated_at: string;
 };
 
 export async function getCategories(): Promise<Category[]> {
@@ -26,4 +38,19 @@ export async function getQuiz(
     params: { category },
   });
   return res.data;
+}
+
+export async function submitResult(
+  answers: { question_id: number; selected_index: number }[],
+): Promise<void> {
+  await api.post('/quizzes/result', { answers });
+}
+
+export async function getStruggles(): Promise<Struggle[]> {
+  const res = await api.get<Struggle[]>('/quizzes/struggles');
+  return res.data;
+}
+
+export async function masterStruggle(questionId: number): Promise<void> {
+  await api.delete(`/quizzes/struggles/${questionId}`);
 }

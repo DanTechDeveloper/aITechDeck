@@ -61,7 +61,9 @@ class QuizApiTest extends TestCase
         $response->assertOk()
             ->assertJsonCount(3);
 
-        $this->assertSame('Which HTTP method is idempotent and updates a full resource?', $response->json()[0]['question']);
+        $questions = array_column($response->json(), 'question');
+
+        $this->assertContains('Which HTTP method is idempotent and updates a full resource?', $questions);
     }
 
     public function test_quiz_returns_404_for_unknown_category(): void

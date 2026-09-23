@@ -5,7 +5,7 @@ import { Card } from '../components/ui/Card';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { colors, spacing, typography } from '../theme/tokens';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'History' | 'HowItWorks'>;
+type Props = NativeStackScreenProps<RootStackParamList, 'HowItWorks'>;
 
 export function PlaceholderScreen({ route }: Props) {
   return (

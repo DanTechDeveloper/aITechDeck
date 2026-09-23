@@ -1,65 +1,73 @@
 # aITechDeck — Agent Guide
 
-Monorepo with a single git repo at the workspace root (branch `master`, no remote). Two independent apps + shared opencode config:
+Single git repo at the workspace root (branch `master`, remote `origin` = `https://github.com/DanTechDeveloper/aITechDeck.git`). No root `package.json`. Three top-level dirs:
 
 - `backend/` — Laravel 13 (PHP ^8.3) API, Sanctum Bearer tokens.
 - `mobile/` — Expo SDK 57, React 19.2 / RN 0.86, plain `App.tsx` entry (no `src/app`, no Expo Router).
-- `.opencode/` — commands (`pm.md` plan gate, `verify.md` gates, `setup.md`) + skills (`DESIGN.md`, `api-contract/SKILL.md`) + empty `opencode-swarm.json` (`{"agents": {}}`).
-- `opencode.json` at root — wires `AGENTS.md` + `.opencode/commands/*` + ponytail plugin. **Run opencode from workspace root** so both apps are in scope.
+- `.opencode/` — commands (`pm`, `setup`, `verify`), skills (`api-contract`, `DESIGN.md`). Run opencode from workspace root; `opencode.json` wires `AGENTS.md` files + commands as instructions.
 
 ## Backend (`backend/`)
 
-**Stack:** `laravel/framework ^13.17`, `laravel/sanctum ^4.0`, `laravel/breeze ^2.4`, `laravel/pint`, `phpunit ^12.5`. DB is **SQLite** (`database/database.sqlite` via absolute path in `.env`); `phpunit.xml` overrides to `:memory:` for tests. MySQL via XAMPP is commented out in `.env` — uncomment and switch `DB_CONNECTION` if needed.
+**Stack:** Laravel `^13.17`, sanctum `^4.0`, breeze `^2.4` (boilerplate only), pint, phpunit `^12.5`. DB is **SQLite** (`database/database.sqlite`); `phpunit.xml` overrides to `:memory:` — tests need no external DB. XAMPP MySQL is commented out in `.env`.
 
-**Entrypoints:** `bootstrap/app.php:7` (routing + `EnsureFrontendRequestsAreStateful` prepended to `api`), `routes/api.php:7` (`/register`, `/login` public; `/user`, `/logout` under `auth:sanctum`), `app/Http/Controllers/Api/AuthController.php:11`.
+**Entrypoints:** `bootstrap/app.php` (routing + `EnsureFrontendRequestsAreStateful` prepended to `api`), `routes/api.php`, `app/Http/Controllers/Api/{AuthController,QuizController}.php`.
 
-**CORS:** `config/cors.php:19` — `allowed_origins ['*']`, `supports_credentials false` (Bearer token, not cookies). Tighten for production.
+**Routes** (`routes/api.php`): `/register` `/login` public; `/user` `/logout` under `auth:sanctum`. Quizzes group (`auth:sanctum`, prefix `/quizzes`): `/categories`, `POST /result`, `/struggles`, `DELETE /struggles/{question}`, then **`GET /{difficulty}` LAST** — the wildcard must come after the literal routes or it swallows them (fixed bug, keep order).
 
-**Commands** (run from `backend/`):
+**CORS:** `config/cors.php` — `allowed_origins ['*']`, `supports_credentials false` (Bearer token). Tighten for production.
+
+**Commands** (from `backend/`):
 ```sh
-composer run setup   # install + copy .env + key:generate + migrate + npm build
-composer run dev     # php artisan dev (pail + queue + vite)
+composer run setup   # install + .env + key:generate + migrate + npm build
 composer run test    # config:clear + php artisan test
-php artisan test --filter=Name          # single test
-php artisan migrate --force
+php artisan test --filter=Name
+php artisan migrate --force            # apply new migrations to dev DB
 php artisan migrate:fresh --seed
-./vendor/bin/pint                        # formatter (laravel/pint)
-php artisan config:clear
-php -v; composer -V                      # prereqs
+./vendor/bin/pint                      # formatter; verify with ./vendor/bin/pint --test
+php artisan serve --host=0.0.0.0 --port=8000   # APP_URL=http://192.168.0.112:8000 in .env
 ```
-Serve: `php artisan serve --host=0.0.0.0 --port=8000` (`.env` expects `APP_URL=http://192.168.0.112:8000`). Update `APP_URL`, `FRONTEND_URL`, `EXPO_DEV_URL` if LAN IP changes.
 
-**Env:** `.env` is gitignored; copy from `.env.example`. Tests use `DB_CONNECTION=sqlite` + `DB_DATABASE=:memory:` from `phpunit.xml:26` — no external DB needed.
+## Feature: mistakes / mastery loop (non-obvious semantics)
+
+- `struggles` table = **boolean mastery flag** per `(user_id, question_id)` (unique pair). Row **exists = flagged/struggling**; row **deleted = mastered**. `selected_index` holds the user's last wrong pick (0-based, matches seeder `position`).
+- Mastery is achieved two ways, same flag, same effect: answer correctly in a quiz (`POST /quizzes/result` deletes the row) OR Study flashcards "Got it" (`DELETE /quizzes/struggles/{question}` deletes it). A wrong quiz answer upserts a row again — mastery is reversible.
+- `QuizController::quizzes()` shuffles the question order server-side on **every** request (per category+difficulty). `answerIndex` is the 0-based seeded option position — never trust the client's correctness claim.
+- `GET /quizzes/struggles` returns all flagged questions with `category`, `difficulty` (lowercase `easy|medium|hard`), `options`, `answerIndex`, `selectedIndex` — the data source for both History and Study screens.
+- API tests live in `tests/Feature/StruggleApiTest.php` + `QuizApiTest.php`: `RefreshDatabase` + `$this->seed()` + `Sanctum::actingAs($user)` (Bearer, NOT Breeze session asserts).
 
 ## Mobile (`mobile/`)
 
-**Stack:** `expo ~57.0.24`, React 19.2, RN 0.86, `expo-secure-store`, `axios`, `react-native-web`. UI via `@gluestack-ui/themed` — `GluestackUIProvider` wraps everything in `components/layout/AppLayout.tsx:8`. No `expo-router`, no `src/app` — old `mobile/AGENTS.md` claiming Expo Router is stale. Entry is `index.ts:1` → `App.tsx:1` (`registerRootComponent`).
+**Stack:** expo `~57.0.24`, `expo-secure-store`, `axios`, `react-native-web`. Entry `index.ts:1` → `App.tsx:1`.
 
-**API wiring:** `config/api.ts:5` hardcodes `LAN_API=http://192.168.0.112:8000/api`, `WEB_API=http://localhost:8000/api`, `EMULATOR_API=http://10.0.2.2:8000/api`. `Platform.OS === 'web'` picks `WEB_API`, otherwise `LAN_API`. Override with `EXPO_PUBLIC_API_URL` (see `.env.example`). `api/client.ts:8` — axios instance with `Bearer` interceptor; token stored via `expo-secure-store` on native, `localStorage` on web.
+**API wiring:** `config/api.ts` hardcodes `LAN_API=http://192.168.0.112:8000/api`, `WEB_API=http://localhost:8000/api`, `EMULATOR_API=http://10.0.2.2:8000/api`; web picks `WEB_API`, else `LAN_API`. Override via `EXPO_PUBLIC_API_URL`. `api/client.ts` — axios `Bearer` interceptor; token in `expo-secure-store` (native) / `localStorage` (web). `api/quiz.ts` holds quiz/struggle wrappers — keep it in sync with the routes above (see `api-contract` skill).
 
-**Auth:** `api/auth.ts:14` — `register`, `login`, `logout`, `getUser` against `/register`, `/login`, `/logout`, `/user`.
+**Screens / flows:**
+- `HomeScreen` — guest vs authenticated states; `getUser()` 401 → guest banner; "Log out" clears token and `replace('Auth')`.
+- `QuizScreen` — chip setup (category+difficulty) → shuffled questions → **no correctness feedback during questions** (only the end result screen). Submits all answers via `POST /result` on the last question. Perfect score hides "Retake quiz"/"Review mistakes".
+- `HistoryScreen` + `StudyScreen` — both use the same chip scope-select (category + difficulty). History = read-only list of flagged mistakes; Study = interactive flashcards per scope. Study is honest-gated: user must pick an answer and get it right before "Got it" appears (self-declared mastery disabled); wrong → "Still learning". Sessions shuffle locally (`Math.random`, biased — fine here).
+- **401 pattern everywhere:** `clearToken()` then `navigation.replace('Auth')` — don't only show an error.
 
-**Commands** (run from `mobile/`):
+**Commands** (from `mobile/`):
 ```sh
 npm start              # expo start
-npm run android / ios / web
-npx tsc --noEmit       # typecheck (extends expo/tsconfig.base, strict)
-npx expo-doctor        # diagnose deps/config
-npx expo install <pkg> # ALWAYS use for native deps — resolves SDK-compatible versions
-npx expo install --fix # fix version mismatches
+npx tsc --noEmit       # typecheck (strict, expo/tsconfig.base)
+npx expo-doctor
+npx expo install <pkg> # ALWAYS for native deps — SDK-compatible versions only
 ```
-No `ios/`/`android/` dirs — Continuous Native Generation via `app.json:24` (`expo-secure-store` plugin). Configure native in `app.json`, never hand-edit generated dirs. After adding native code: `npx expo run:ios` / `run:android` or `eas build --profile development`.
+**CNG:** no `ios/`/`android/` dirs — configure native in `app.json`, never hand-edit generated dirs.
 
-**Env:** `EXPO_PUBLIC_API_URL` in `.env` (gitignored). Template in `mobile/.env.example`.
+## UI rules (strict, user-enforced)
+
+Follow `.opencode/skills/DESIGN.md` for every UI change: reuse `theme/tokens.ts` + `components/ui/*` (`Card`, `AppButton`, `ScreenContainer`); no decorative gradients/glassmorphism/emojis/animations; handle loading/error/empty states; don't introduce new design patterns without product reason. Don't redesign unrelated screens.
 
 ## Cross-cutting Gotchas
 
-- **Hardcoded LAN IP `192.168.0.112`** appears in `backend/.env:5`, `mobile/config/api.ts:5`, `mobile/.env.example:1`. Breaks on network change or CI — prefer `EXPO_PUBLIC_API_URL` override and update `APP_URL` together.
-- **Backend `AGENTS.md`/`CLAUDE.md`** are unmodified Laravel Boost boilerplate (install `laravel/boost`) — ignore; real auth is Sanctum Bearer in `routes/api.php`, not Breeze session flow.
-- **Mobile `AGENTS.md`** previously described Expo Router — verified absent. Do not create `src/app/` or `_layout.tsx`.
-- **Git:** single repo at **workspace root** (`aITechDeck/.git`, branch `master`, no remote — one commit "Initial commit: merge backend + mobile into monorepo"). Factory-fresh `vendor/`, `node_modules/` are not committed. Old `mobile/.git` no longer exists — commit everything from the root.
-- **Root `package.json`:** only hosts an opencode helper dep (`@karnak19/ocpt`) + stray nav duplicates; NOT used by either app. Each app has its own manifest — don't `npm install` at root expecting app deps.
-- **No root test/lint runner** — verify per-package (`backend: composer run test` + `./vendor/bin/pint`; `mobile: npx tsc --noEmit`) or run `.opencode/commands/verify.md` which chains both.
+- **Hardcoded LAN IP `192.168.0.112`** in `backend/.env` + `mobile/config/api.ts` — breaks on network change/CI. Prefer `EXPO_PUBLIC_API_URL` override and update `APP_URL` together.
+- **Backend `AGENTS.md`/`CLAUDE.md`** are unmodified Laravel Boost boilerplate — ignore; real auth is Sanctum Bearer in `routes/api.php`.
+- **Mobile `AGENTS.md`** previously claimed Expo Router — verified absent (deleted). Do not create `src/app/` or `_layout.tsx`.
+- **No root test/lint runner** — verify per-package (commands below).
+- `.env` files are gitignored; copy from `.env.example`.
+- API work → load `api-contract` skill and run `php artisan route:list | grep api` to confirm the path + order.
 
 ## Verification Order
 
@@ -69,3 +77,4 @@ cd backend && composer run test && ./vendor/bin/pint --test
 # mobile
 cd mobile && npx tsc --noEmit && npx expo-doctor
 ```
+`/verify` in `.opencode/commands/verify.md` runs the same gates and stops at first failure. Use `/pm` (planning gate) before non-trivial changes.

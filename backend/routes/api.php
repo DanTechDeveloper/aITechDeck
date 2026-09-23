@@ -15,5 +15,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
 Route::middleware('auth:sanctum')->prefix('/quizzes')->group(function () {
     Route::get('/categories', [QuizController::class, 'categories']);
+    Route::post('/result', [QuizController::class, 'result']);
+    Route::get('/struggles', [QuizController::class, 'struggles']);
+    Route::delete('/struggles/{question}', [QuizController::class, 'mastered']);
     Route::get('/{difficulty}', [QuizController::class, 'quizzes']);
 });

@@ -4,7 +4,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ScreenContainer } from '../components/layout/ScreenContainer';
 import { AppButton } from '../components/ui/AppButton';
 import { Card } from '../components/ui/Card';
-import { getUser } from '../api/auth';
+import { getUser, logout } from '../api/auth';
 import { clearToken } from '../api/client';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 import type { RootStackParamList } from '../navigation/AppNavigator';
@@ -73,6 +73,24 @@ export function HomeScreen({ navigation }: Props) {
             onPress={() => setRetry((n) => n + 1)}
           />
         ) : null}
+        {auth === 'authenticated' ? (
+          <View style={styles.guestRow}>
+            <AppButton
+              title="Log out"
+              variant="outline"
+              onPress={async () => {
+                try {
+                  await logout();
+                } catch {
+                  // ignore server failure; clear local session anyway
+                } finally {
+                  clearToken();
+                  navigation.replace('Auth');
+                }
+              }}
+            />
+          </View>
+        ) : null}
       </View>
 
       <Card>
@@ -90,20 +108,23 @@ export function HomeScreen({ navigation }: Props) {
       </Card>
 
       <Card>
-        <Text style={styles.cardTitle}>Recent activity</Text>
+        <Text style={styles.cardTitle}>Review mistakes</Text>
         <Text style={styles.cardBody}>
-          No quizzes yet. Your completed quizzes and topic reviews will show up here.
+          Questions you flagged during quizzes are kept here, grouped by topic, so you can go back
+          and relearn them until mastered.
         </Text>
         <View style={styles.action}>
           <AppButton
-            title="View history"
+            title="View mistakes"
             variant="outline"
-            onPress={() =>
-              navigation.navigate('History', {
-                title: 'My quizzes',
-                body: 'Completed quizzes and topic reviews will appear here once saved to the backend.',
-              })
-            }
+            onPress={() => navigation.navigate('History')}
+          />
+        </View>
+        <View style={styles.action}>
+          <AppButton
+            title="Study flashcards"
+            variant="outline"
+            onPress={() => navigation.navigate('Study')}
           />
         </View>
       </Card>
