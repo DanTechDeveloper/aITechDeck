@@ -1,5 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "instructions": ["AGENTS.md", "backend/AGENTS.md", "mobile/AGENTS.md"],
+  "instructions": ["AGENTS.md", "backend/AGENTS.md", "mobile/AGENTS.md", ".opencode/commands/pm.md", ".opencode/commands/setup.md", ".opencode/commands/verify.md"],
   "plugin": ["/home/dan/ponytail/.opencode/plugins/ponytail.mjs"]
 }
